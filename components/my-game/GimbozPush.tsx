@@ -45,10 +45,29 @@ const GimbozPush: React.FC<GimbozPushProps> = ({ game }) => {
   const shouldShowPNL = payout > betAmount
   const playAgainText = `Play Again (${numberOfDrops} More Drops)`
 
+  const getSeed = (gameId: bigint, randomWord: Hex): string => `${gameId.toString()}-${randomWord}`
+
   useEffect(() => {
     if (replayIdString !== null && replayIdString.length > 2) {
-      setIsLoading(true)
-      setCurrentGameId(BigInt(replayIdString))
+      const replayGameId = BigInt(replayIdString)
+      const replayRun = generatePusherRun({
+        seed: getSeed(replayGameId, userRandomWord),
+        payouts: game.payouts,
+        betAmount: Math.max(betAmount, GIMBOZ_PUSH_CONFIG.minBet),
+        totalDrops: numberOfDrops,
+        selectedLane,
+      })
+
+      setCurrentGameId(replayGameId)
+      setRun(replayRun)
+      setGameState({
+        ...getInitialGimbozPushState(selectedLane, numberOfDrops),
+        resolvedSteps: replayRun.steps,
+        totalDrops: replayRun.totalDrops,
+      })
+
+      setIsLoading(false)
+      setCurrentView(1)
     }
   }, [replayIdString])
 
@@ -61,7 +80,6 @@ const GimbozPush: React.FC<GimbozPushProps> = ({ game }) => {
     return () => window.clearTimeout(timer)
   }, [gameState.gameOver])
 
-  const getSeed = (gameId: bigint, randomWord: Hex): string => `${gameId.toString()}-${randomWord}`
   const getDropsLeft = (): number => Math.max(0, numberOfDrops - gameState.currentDropIndex)
   const getActiveBetAmount = (): number => betAmount
 
@@ -76,8 +94,8 @@ const GimbozPush: React.FC<GimbozPushProps> = ({ game }) => {
   }
 
   const playGame = async (gameId?: bigint, randomWord?: Hex) => {
-    if (betAmount <= 0) {
-      toast.error('Enter a bet amount first.')
+    if (betAmount < GIMBOZ_PUSH_CONFIG.minBet) {
+      toast.error(`Minimum bet is ${GIMBOZ_PUSH_CONFIG.minBet} APE.`)
       return
     }
 
@@ -88,15 +106,6 @@ const GimbozPush: React.FC<GimbozPushProps> = ({ game }) => {
     const randomWordToUse = randomWord ?? userRandomWord
 
     try {
-      const receiptSuccess = true
-
-      if (!receiptSuccess) {
-        toast.info('Something went wrong.')
-        setIsLoading(false)
-        setIsGameOngoing(false)
-        return
-      }
-
       const nextRun = buildRun(gameIdToUse, randomWordToUse)
       setRun(nextRun)
       setGameState({
@@ -111,15 +120,7 @@ const GimbozPush: React.FC<GimbozPushProps> = ({ game }) => {
         setCurrentView(1)
       }, 1000)
     } catch (error) {
-      if (
-        (error instanceof Error && error.message.includes('Transaction not found')) ||
-        (typeof error === 'string' && error.includes('Transaction not found'))
-      ) {
-        console.warn('Ignoring a known timeout error.')
-        return
-      }
-
-      console.error('An unexpected error occurred:', error)
+      console.error(error)
       toast.error('An unexpected error occurred.')
       setIsLoading(false)
       setIsGameOngoing(false)
