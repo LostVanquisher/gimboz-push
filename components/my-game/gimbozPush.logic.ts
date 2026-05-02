@@ -11,12 +11,6 @@ interface GeneratePusherRunParams {
   selectedLane: DropLane
 }
 
-const laneXMap: Record<DropLane, number> = {
-  left: 22,
-  center: 50,
-  right: 78,
-}
-
 function hashStringToNumber(input: string): number {
   let hash = 2166136261
   for (let i = 0; i < input.length; i += 1) {
@@ -26,51 +20,30 @@ function hashStringToNumber(input: string): number {
   return Math.abs(hash >>> 0)
 }
 
+function rand(seed: string, salt: string): number {
+  return hashStringToNumber(seed + '-' + salt) / 2 ** 32
+}
+
 function getDeterministicSymbol(seed: string, index: number, salt: string): number {
   return hashStringToNumber(`${seed}-${index}-${salt}`) % 6
 }
 
-function createToken(params: {
-  id: string
-  lane: DropLane
-  value: number
-  dropIndex: number
-  type?: 'base' | 'gimboz'
-  falling?: boolean
-}): PusherToken {
-  const laneBaseX = laneXMap[params.lane]
-  const jitter = ((hashStringToNumber(params.id) % 11) - 5) * 0.8
-
-  return {
-    id: params.id,
-    type: params.type ?? 'base',
-    lane: params.lane,
-    value: params.value,
-    x: laneBaseX + jitter,
-    y: 18 + (params.dropIndex % 7) * 6,
-    zIndex: params.dropIndex,
-    falling: params.falling ?? false,
-  }
+function getPushStrength(seed: string, dropIndex: number, pileSize: number): number {
+  const base = 0.6 + rand(seed, `push-${dropIndex}`) * 0.6
+  const weightBonus = Math.min(0.5, pileSize * 0.015)
+  return base + weightBonus
 }
 
-function getFallenTokenCountFromPayoutFactor(payoutFactor: number): number {
-  if (payoutFactor <= 0) return 0
-  if (payoutFactor >= 500000) return 5
-  if (payoutFactor >= 250000) return 4
-  if (payoutFactor >= 100000) return 3
-  if (payoutFactor >= 50000) return 2
-  return 1
+function getFallProbability(positionY: number, pushStrength: number): number {
+  const frontBias = positionY / 100
+  return Math.min(0.95, 0.15 + frontBias * 0.6 + pushStrength * 0.25)
 }
 
-function shouldTriggerGimbozNudge(params: {
-  seed: string
-  dropIndex: number
-  cascadeDepth: number
-  payoutFactor: number
-}): boolean {
-  if (params.cascadeDepth >= 2 && params.payoutFactor > 0) return true
-  const roll = hashStringToNumber(`${params.seed}-${params.dropIndex}-gimboz-nudge`) % 100
-  return roll >= 92
+function chooseFallSlot(seed: string, tokenId: string): 0 | 1 | 2 {
+  const roll = hashStringToNumber(seed + tokenId) % 100
+  if (roll < 40) return 0
+  if (roll < 70) return 1
+  return 2
 }
 
 export function generatePusherRun({ seed, payouts, betAmount, totalDrops, selectedLane }: GeneratePusherRunParams): GimbozPushRun {
@@ -82,6 +55,8 @@ export function generatePusherRun({ seed, payouts, betAmount, totalDrops, select
   let bestCascadeDepth = 0
   let anyBonusTriggered = false
 
+  let simulatedPile: PusherToken[] = []
+
   for (let dropIndex = 0; dropIndex < safeTotalDrops; dropIndex += 1) {
     const reelOutcome: [number, number, number] = [
       getDeterministicSymbol(seed, dropIndex, 'a'),
@@ -91,33 +66,58 @@ export function generatePusherRun({ seed, payouts, betAmount, totalDrops, select
 
     const payoutFactor = getPayout(payouts, reelOutcome[0], reelOutcome[1], reelOutcome[2])
     const payout = (betPerDrop * payoutFactor) / 10000
-    const fallenTokenCount = getFallenTokenCountFromPayoutFactor(payoutFactor)
 
-    const cascadeDepth = fallenTokenCount >= 5 ? 2 : fallenTokenCount >= 3 ? 1 : 0
-    bestCascadeDepth = Math.max(bestCascadeDepth, cascadeDepth)
+    const pushStrength = getPushStrength(seed, dropIndex, simulatedPile.length)
 
-    const bonusTriggered = shouldTriggerGimbozNudge({ seed, dropIndex, cascadeDepth, payoutFactor }) ? 'gimboz-nudge' : null
-    if (bonusTriggered) anyBonusTriggered = true
+    // simulate push forward
+    simulatedPile = simulatedPile.map((t) => ({
+      ...t,
+      y: Math.min(100, t.y + pushStrength * 18),
+    }))
 
-    const tokensAdded = [
-      createToken({
-        id: `drop-${dropIndex}-token-0`,
+    const tokensAdded: PusherToken[] = [
+      {
+        id: `drop-${dropIndex}`,
+        type: 'base',
         lane: selectedLane,
         value: betPerDrop,
-        dropIndex,
-        type: bonusTriggered ? 'gimboz' : 'base',
-      }),
+        x: 50 + (rand(seed, `x-${dropIndex}`) - 0.5) * 20,
+        y: 20,
+        zIndex: dropIndex,
+      },
     ]
 
-    const tokensFallen = Array.from({ length: fallenTokenCount }).map((_, i) =>
-      createToken({
-        id: `drop-${dropIndex}-fallen-${i}`,
-        lane: selectedLane,
-        value: payout / Math.max(1, fallenTokenCount),
-        dropIndex,
-        falling: true,
-      })
-    )
+    simulatedPile.push(...tokensAdded)
+
+    const tokensFallen: PusherToken[] = []
+    let nearMissCount = 0
+
+    simulatedPile = simulatedPile.filter((token) => {
+      const fallProb = getFallProbability(token.y, pushStrength)
+      const roll = rand(seed, token.id + '-' + dropIndex)
+
+      if (token.y > 80 && roll < fallProb) {
+        tokensFallen.push({
+          ...token,
+          falling: true,
+          fallSlot: chooseFallSlot(seed, token.id),
+        })
+        return false
+      }
+
+      if (token.y > 70 && roll > fallProb) {
+        nearMissCount++
+        token.nearMiss = true
+      }
+
+      return true
+    })
+
+    const cascadeDepth = tokensFallen.length >= 4 ? 2 : tokensFallen.length >= 2 ? 1 : 0
+    bestCascadeDepth = Math.max(bestCascadeDepth, cascadeDepth)
+
+    const bonusTriggered = cascadeDepth >= 2 ? 'gimboz-nudge' : null
+    if (bonusTriggered) anyBonusTriggered = true
 
     const step: PusherStep = {
       id: `step-${dropIndex}`,
@@ -130,6 +130,9 @@ export function generatePusherRun({ seed, payouts, betAmount, totalDrops, select
       payout,
       cascadeDepth,
       bonusTriggered,
+      pushStrength,
+      nearMissCount,
+      shakeIntensity: pushStrength,
     }
 
     totalPayout += payout
