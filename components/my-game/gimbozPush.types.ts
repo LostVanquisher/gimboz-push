@@ -23,6 +23,10 @@ export interface PusherToken {
   y: number
   zIndex: number
   falling?: boolean
+  pushX?: number
+  pushY?: number
+  fallSlot?: 0 | 1 | 2
+  nearMiss?: boolean
 }
 
 export interface PusherStep {
@@ -36,6 +40,9 @@ export interface PusherStep {
   payout: number
   cascadeDepth: number
   bonusTriggered: BonusType
+  pushStrength: number
+  nearMissCount: number
+  shakeIntensity: number
 }
 
 export interface GimbozPushRun {
