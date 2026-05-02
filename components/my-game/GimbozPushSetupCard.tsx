@@ -1,5 +1,4 @@
 import React from 'react'
-import Image from 'next/image'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -196,7 +195,7 @@ const GimbozPushSetupCard: React.FC<GimbozPushSetupCardProps> = ({
 
             <div className="mt-5">
               <BetAmountInput
-                min={0}
+                min={GIMBOZ_PUSH_CONFIG.minBet}
                 max={getCurrentWalletAmount()}
                 step={0.1}
                 value={betAmount}
@@ -264,16 +263,16 @@ const GimbozPushSetupCard: React.FC<GimbozPushSetupCardProps> = ({
           {DropsLeftBlock(false)}
           <div className="flex lg:flex-col justify-evenly items-center">
             {DropsLeftBlock(true)}
-            <div className="font-roboto flex flex-col items-center gap-3">
-              {game.advanceToNextStateAsset ? (
-                <button onClick={onDrop} className="w-full" disabled={dropsLeft <= 0 || isGamePaused}>
-                  <Image src={game.advanceToNextStateAsset} alt="Drop Token" width={196.5} height={179.82} className="transition-transform duration-100 ease-out active:scale-97 w-[109px] h-[100px] sm:w-[131px] sm:h-[120px] lg:w-[184px] lg:h-[168.35px]" />
-                </button>
-              ) : (
-                <Button onClick={onDrop} className="w-full" disabled={dropsLeft <= 0 || isGamePaused}>
-                  Drop Token
-                </Button>
-              )}
+            <div className="font-roboto flex flex-col items-center gap-3 w-full">
+              <Button
+                onClick={onDrop}
+                className="w-full min-h-[84px] text-xl font-bold tracking-wide"
+                style={{ backgroundColor: themeColorBackground, borderColor: themeColorBackground }}
+                disabled={dropsLeft <= 0 || isGamePaused}
+              >
+                Drop Token
+              </Button>
+              <p className="text-xs text-[#91989C]">Push the pile. Feed the edge.</p>
             </div>
           </div>
         </CardContent>
