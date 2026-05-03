@@ -1,15 +1,15 @@
 import { Game } from "@/lib/games";
 
 export const myGame: Game = {
-    title: "My Game",
-    description: "This is my game",
+    title: "Wild Push",
+    description: "Wild found the edge of the machine. Drop Gimboz tokens, feed the pile, and chase chaotic cascade payouts in an Ape-native coin pusher built for Ape Church.",
     gameAddress: "0x1234567890123456789012345678901234567890",
     gameBackground: "/my-game/background.png",
     // animatedBackground: "/my-game/animated-background.mp4",
     card: "/my-game/card.png", // 1:1 aspect ratio (e.g. 512x512)
     banner: "/my-game/banner.png", // 2:1 aspect ratio (e.g. 1024x512)
     advanceToNextStateAsset: "/my-game/advance-button.png",
-    themeColorBackground: "#F54927",
+    themeColorBackground: "#B8793E",
     song: "/my-game/audio/song.mp3",
     payouts: {
         0: {
